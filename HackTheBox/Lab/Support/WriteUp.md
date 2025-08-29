@@ -140,7 +140,7 @@ Custom LDAP enumeration found a suspicious `info` field:
 * Enumerated all domain users and built a wordlist.
 
 ---
-
+ 
 ## 🔑 Exploitation – Foothold
 
 Brute-forced with known password string:
