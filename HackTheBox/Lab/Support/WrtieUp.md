@@ -19,7 +19,6 @@
 ### Nmap
 ```zsh
 nmap -sC -sV -oA nmap/support 10.10.11.174
-```
 ````
 
 ```
@@ -245,3 +244,8 @@ nt authority\system
   * Exploit RBCD for Domain Admin when `GenericAll` on DC computer object.
 
 ---
+
+````
+
+---
+````
