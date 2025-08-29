@@ -209,6 +209,7 @@ C:\Users\Administrator\Desktop> type root.txt
 ae1605fecb42f57a3d34817e12d24252
 ```
 
+
 * **Result:** Full SYSTEM access (Domain Admin).
 
 ---
