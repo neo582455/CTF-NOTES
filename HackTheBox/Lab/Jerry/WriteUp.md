@@ -1,9 +1,5 @@
-It seems like I can’t do more advanced data analysis right now. Please try again later.
-
-But don’t worry — I can still give you the **ready-to-save Markdown text** for your Tomcat writeup. If you copy this into a file called `Tomcat.md` on your machine, it’ll work exactly the same as the other downloadable files I made earlier:
-
 ````markdown
-# 🧑‍💻 Hack The Box – (Tomcat Box)
+# 🧑‍💻 Hack The Box – (Jerry)
 
 ## 📌 Overview
 - **Machine Name:** Jerry
