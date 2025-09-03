@@ -6,12 +6,12 @@ But don’t worry — I can still give you the **ready-to-save Markdown text** f
 # 🧑‍💻 Hack The Box – (Tomcat Box)
 
 ## 📌 Overview
-- **Machine Name:** (Update if known)
+- **Machine Name:** Jerry
 - **IP Address(es):** 10.10.10.95
 - **Difficulty:** Easy
 - **OS:** Windows
 - **Tags:** Tomcat / Default Credentials / WAR Upload / Metasploit
-- **Date Completed:** (Add date)
+- **Date Completed:** 2025.08.31
 - **Status:** ✅ User | ✅ Root
 
 ---
